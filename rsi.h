@@ -21,6 +21,9 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <regex>
+#include <thread>
+#include <atomic>
 
 //////////////////////////////////////////////////////////////
 // config
@@ -62,14 +65,9 @@ class RSI
 
 public:
     RSI( std::string port )
-	: m_port( port )
+	: m_port( port ),
+	  m_signal( false )
 	{
-	    //////////////////////////////////////////////////////////////
-	    // set up communication
-	    if( !connect( m_port ) )
-		throw std::out_of_range( "Connection not established\n" );
-
-	    
 	    
 	}
 
@@ -77,8 +75,15 @@ public:
 	
     ~RSI()
 	{
+	    m_thread.join();
 	    close(m_sockfd);
 	}
+
+    void start()
+	{
+	    m_thread = std::thread( [this] { RSIthreadFnc(); } );
+	}
+
 
 
     int receive()
@@ -88,6 +93,8 @@ public:
 
 	    if ((numbytes = recvfrom(m_sockfd, m_buffer, MAXBUFLEN-1 , 0, (struct sockaddr *) &m_their_addr, &m_addr_len)) == -1)
 		perror("recvfrom");
+	    m_buffer[numbytes] = '\0';
+
 
 	    
 #ifdef _DEBUG_RSI_
@@ -97,9 +104,9 @@ public:
 	    std::cout << "Got packet from " << inet_ntop(m_their_addr.ss_family, get_in_addr((struct sockaddr *)&m_their_addr), s, sizeof( s )) << std::endl;
   
 	    std::cout << "It is " << numbytes << " bytes and contains\n\t";
-	    m_buffer[numbytes] = '\0';
 	    std::cout << " \" " << m_buffer << " \" " << std::endl;
 #endif
+
 	    
 	    return numbytes;
 
@@ -172,9 +179,58 @@ public:
 	}
 
 
+    unsigned long long extractTimestamp( std::string &IPOC )
+	{
+
+	    std::regex rgx("<IPOC>\\d+<\\/IPOC>");
+	    std::cmatch match;
+
+	    
+	    if( std::regex_search( m_buffer, match, rgx ) )
+	    {
+		IPOC = match[0];
+
+		int len = IPOC.length();
+		std::string num = IPOC.substr(6, len-(6+7));
+
+		return std::stoll( num );
+		
+	    }
+
+	    return 0;
+	}
+
+    void setPose( double pose[12] )
+	{
+	    m_signal = true;
+	}
     
 
 protected:
+
+        void RSIthreadFnc( )
+    {
+
+	//////////////////////////////////////////////////////////////
+	    // set up communication
+	    if( !connect( m_port ) )
+		throw std::out_of_range( "Connection not established\n" );
+
+	  std::string msg = "Testing 123";
+
+	  while( !m_signal )
+	  {
+	      receive();
+
+	      std::string ipoc = "";
+	      std::cout << extractTimestamp( ipoc ) << " = " << ipoc << std::endl;
+
+	      send(msg);
+	  }
+
+
+    }
+
 
 private:
 
@@ -184,12 +240,12 @@ private:
     struct sockaddr_storage m_their_addr;
     socklen_t m_addr_len;
 
-    int extractTimestamp( std::string IPOC )
-	{
-	    
-	}
+    std::thread m_thread;
+    std::atomic<bool> m_signal;
 
 };
+
+    
 
 }// namespace HH
 

@@ -1,7 +1,7 @@
 EXE=com.out
 objects= build/main.o
 
-LIBS = 
+LIBS = -lpthread
 CXX = g++
 CXXFLAGS = --std=c++11
 
