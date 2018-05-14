@@ -24,9 +24,12 @@ int main(int argc, char *argv[])
 */
     sleep(5);
 
+
     double pose[12] = {0};
 
     rsi.setPose( pose );
+
+    rsi.end();
     
     return 0;
 }

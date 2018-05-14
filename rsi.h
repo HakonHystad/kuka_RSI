@@ -24,6 +24,7 @@
 #include <regex>
 #include <thread>
 #include <atomic>
+#include <ctime>
 
 //////////////////////////////////////////////////////////////
 // config
@@ -32,6 +33,13 @@
 //#define MYPORT "4950"    // the port users will be connecting to
 #define _DEBUG_RSI_
 #define MAXBUFLEN 1024
+
+namespace HH
+{
+    // start pose: x,y,z,x_d,y_d,z_d,A,B,C,A_dot, B_dot, C_dot
+    const double home[12] = {1.35, 0, 1.569, 0, 0, 0, 0, 0, -3.1416, 0, 0, 0};
+}
+
 
 //////////////////////////////////////////////////////////////
 // helpers
@@ -66,7 +74,9 @@ class RSI
 public:
     RSI( std::string port )
 	: m_port( port ),
-	  m_signal( false )
+	  m_signal( false ),
+	  m_end( false ),
+	  m_error( false )
 	{
 	    
 	}
@@ -75,7 +85,8 @@ public:
 	
     ~RSI()
 	{
-	    m_thread.join();
+	    if( !m_end )
+		end();
 	    close(m_sockfd);
 	}
 
@@ -83,7 +94,11 @@ public:
 	{
 	    m_thread = std::thread( [this] { RSIthreadFnc(); } );
 	}
-
+    void end()
+	{
+	    m_end = true;
+	    m_thread.join();
+	}
 
 
     int receive()
@@ -179,7 +194,7 @@ public:
 	}
 
 
-    unsigned long long extractTimestamp( std::string &IPOC )
+    void extractTimestamp( std::string &IPOC )
 	{
 
 	    std::regex rgx("<IPOC>\\d+<\\/IPOC>");
@@ -190,46 +205,92 @@ public:
 	    {
 		IPOC = match[0];
 
-		int len = IPOC.length();
-		std::string num = IPOC.substr(6, len-(6+7));
-
-		return std::stoll( num );
+//		int len = IPOC.length();
+//		std::string num = IPOC.substr(6, len-(6+7));
 		
 	    }
 
-	    return 0;
 	}
 
-    void setPose( double pose[12] )
+    bool setPose( double pose[12] )
 	{
 	    m_signal = true;
+
+	    return !m_error;
 	}
     
 
 protected:
 
-        void RSIthreadFnc( )
-    {
+    void RSIthreadFnc( )
+	{
 
-	//////////////////////////////////////////////////////////////
+	    //////////////////////////////////////////////////////////////
 	    // set up communication
 	    if( !connect( m_port ) )
 		throw std::out_of_range( "Connection not established\n" );
 
-	  std::string msg = "Testing 123";
 
-	  while( !m_signal )
-	  {
-	      receive();
+	    double newTime = (double)clock()/CLOCKS_PER_SEC;
+	    double oldTime = newTime;
 
-	      std::string ipoc = "";
-	      std::cout << extractTimestamp( ipoc ) << " = " << ipoc << std::endl;
+	    double currentPose[12];
+	    for (int i = 0; i < 12; ++i)
+		currentPose[i] = home[i];
 
-	      send(msg);
-	  }
+	    
+	    while( !m_end )
+	    {
+		// wait for new RSI message
+		int nbytes = receive();
+		
+		newTime = (double)clock()/CLOCKS_PER_SEC;
+
+		if( nbytes < 1 )
+		{
+		    m_error = true;
+		    break;
+		}
 
 
-    }
+
+		// handle the IPOC
+		std::string ipoc = "";
+		extractTimestamp( ipoc );
+
+		if( ipoc.empty() )
+		{
+		    std::cerr << "IPOC error\n";
+		    m_error = true;
+		    break;
+		}
+
+
+		// check if pose has been updated
+		if( m_signal )
+		{
+		
+		    // TODO: send the newly acquired pose
+		}
+		else
+		{
+		    // TODO: run update function to get an intermidiate pose
+		}
+
+		// TODO perform optional interpolation
+
+		// TODO perform inverse kinematics
+
+		// TODO pack an xml string with joint angles and IPOC
+
+		send(ipoc);
+
+		std::cout << "Time: " << newTime - oldTime << std::endl;
+		oldTime = newTime;
+	    }
+
+
+	}
 
 
 private:
@@ -242,7 +303,8 @@ private:
 
     std::thread m_thread;
     std::atomic<bool> m_signal;
-
+    std::atomic<bool> m_end;
+    std::atomic<bool> m_error;
 };
 
     
