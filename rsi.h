@@ -134,7 +134,7 @@ public:
 	}
 
 //////////////////////////////////////////////////////////////
-// use to update the desired pose of the manipulator
+// refresh the desired pose of the manipulator
 /////////////////////////////////////////////////////////////
 
 
@@ -177,14 +177,14 @@ protected:
 		return;
 	    }
 
-	    
+	    // TODO implement RK4
 
 	    
 	}
 
 
 //////////////////////////////////////////////////////////////
-// The continued communication with the KUKA controller in a separate thread
+// The continued communication with the KUKA controller is in a separate thread
 /////////////////////////////////////////////////////////////
     
     void RSIthreadFnc( )
@@ -225,7 +225,7 @@ protected:
 		
 		//////////////////////////////////////////////////////////////
 		// extract ACK signal to send back
-		std::string ipoc;;
+		std::string ipoc;
 
 		if( !extractTimestamp( ipoc ) )
 		{
@@ -256,17 +256,12 @@ protected:
 		oldTime = newTime;
 
 		
-		// TODO: run update function to get an intermidiate pose
-
-		// TODO perform optional interpolation
 
 		// TODO perform inverse kinematics
 
 		//////////////////////////////////////////////////////////////
 		// send the new pose to the controller
-		
-		// make xml string with joint angles and IPOC
-		packXML( axis, ipoc );
+		packXML( axis, ipoc );// make xml string with joint angles and IPOC
 
 		if( send(ipoc) != ipoc.length() )
 		{
@@ -277,7 +272,7 @@ protected:
 
 	    }// while not ended
 
-	    // TODO soft stop, maybe interpolate to a pose close by?
+	    // TODO soft stop, maybe repeat the last pose a couple times
 
 	    m_end = true;
 	}
