@@ -1,3 +1,13 @@
+/*
+ * A header class to control KUKA manipulators via the RSI interface.
+ * The instance will keep updating the controller at the required 250Hz,
+ * but the wanted poses can be sent sporadically by using setPose.
+ * Overload the function update() to choose how the intermidiate poses
+ * are chosen between setPose updates.
+ */
+
+// Written in May 2018 by Håkon Hystad: hakonhystad@gmail.com
+
 #ifndef _RSI_H_
 #define _RSI_H_
 
@@ -34,7 +44,6 @@
 // config
 /////////////////////////////////////////////////////////////
 
-//#define MYPORT "4950"    // the port users will be connecting to
 #define _DEBUG_RSI_
 #define MAXBUFLEN 1024
 #define POSE_SZ 12
@@ -83,7 +92,7 @@ public:
     RSI( std::string port )
 	: m_port( port ),
 	  m_signal( false ),
-	  m_end( false ),
+	  m_end( true ),
 	  m_error( false )
 	{
 	    
@@ -97,18 +106,250 @@ public:
 		end();
 	    close(m_sockfd);
 	}
+    
+//////////////////////////////////////////////////////////////
+// start communication with the controller
+/////////////////////////////////////////////////////////////
 
+    
     void start()
 	{
-	    m_thread = std::thread( [this] { RSIthreadFnc(); } );
+	    if( m_end )
+	    {
+		m_end = false;
+		m_thread = std::thread( [this] { RSIthreadFnc(); } );
+	    }
+	    else
+		std::cerr << "End communication before starting a new session\n";
 	}
+
+//////////////////////////////////////////////////////////////
+// stop communicatin with the controller
+/////////////////////////////////////////////////////////////
+    
     void end()
 	{
 	    m_end = true;
 	    m_thread.join();
 	}
 
+//////////////////////////////////////////////////////////////
+// use to update the desired pose of the manipulator
+/////////////////////////////////////////////////////////////
 
+
+    bool setPose( std::vector<double> pose )
+	{
+	    std::lock_guard<std::mutex> lock(m_mtx);
+
+	    for (int i = 0; i < POSE_SZ; ++i)
+		m_pose[i] = pose.at(i);			    		    
+
+	    m_signal = true;
+
+	    return !m_error;
+	}
+
+
+    
+
+protected:
+
+//////////////////////////////////////////////////////////////
+// integrate or otherwise update the current pose when requested by the KUKA controller
+/////////////////////////////////////////////////////////////
+    
+    // Overload to get a custom implementation.
+    // The format of currentPose is optional, but newPose must follow x,y,z,A,B,C
+    // where x,y,z are in mm and A,B,C are kuka Euler angles (ZYX) in degrees.
+    // Remember to handle the case if interval<1e6 s which means currentPose has been very recently refreshed.
+    void update( double newPose[6], double currentPose[POSE_SZ], double interval )
+	{
+	    if( interval < 1e6 )
+	    {
+		// here it is assumed that currentPose has the linear and angular velocities as well:
+		// x,y,z,x_d,y_d,z_d,A,B,C,A_d,B_d,C_d
+		// The newPose is simply the same as the given pose
+		for(int i = 0; i < 3; ++i)
+		    newPose[i] = currentPose[i];
+		for(int i = 0; i < 3; ++i)
+		    newPose[i+3] = currentPose[i+6];
+		return;
+	    }
+
+	    
+
+	    
+	}
+
+
+//////////////////////////////////////////////////////////////
+// The continued communication with the KUKA controller in a separate thread
+/////////////////////////////////////////////////////////////
+    
+    void RSIthreadFnc( )
+	{
+
+	    //////////////////////////////////////////////////////////////
+	    // set up communication
+	    if( !connect( m_port ) )
+		throw std::out_of_range( "Connection not established\n" );
+
+
+	    //////////////////////////////////////////////////////////////
+	    // initialize
+	    m_error = false;
+	    m_end = false;
+	    double newTime = (double)clock()/CLOCKS_PER_SEC;
+	    double oldTime = newTime;
+
+	    double currentPose[POSE_SZ];
+	    for (int i = 0; i < POSE_SZ; ++i)
+		currentPose[i] = home[i];
+
+	    double axis[N_AXIS];
+	    for (int i = 0; i < N_AXIS; ++i)
+		axis[i] = home_axis[i];
+
+	    //////////////////////////////////////////////////////////////
+	    // main loop
+	    while( !m_end )
+	    {
+		//////////////////////////////////////////////////////////////
+		// wait for until controller needs new update
+		if( receive() < 1 )
+		{
+		    m_error = true;
+		    break;
+		}
+		
+		//////////////////////////////////////////////////////////////
+		// extract ACK signal to send back
+		std::string ipoc;;
+
+		if( !extractTimestamp( ipoc ) )
+		{
+		    std::cerr << "IPOC error\n";
+		    m_error = true;
+		    break;
+		}
+
+
+		//////////////////////////////////////////////////////////////
+		// refresh with new pose if one is given
+		newTime = (double)clock()/CLOCKS_PER_SEC;
+	        
+		if( m_signal )
+		{	        
+		    std::lock_guard<std::mutex> lock(m_mtx);
+		    for (int i = 0; i < POSE_SZ; ++i)
+			currentPose[i] = m_pose[i];
+		    m_signal = false;
+		    oldTime = newTime;
+		}
+
+		//////////////////////////////////////////////////////////////
+		// get intermidiate pose
+		double sendPose[6];// x,y,z,A,B,C
+		
+		update( sendPose, currentPose, newTime - oldTime );
+		oldTime = newTime;
+
+		
+		// TODO: run update function to get an intermidiate pose
+
+		// TODO perform optional interpolation
+
+		// TODO perform inverse kinematics
+
+		//////////////////////////////////////////////////////////////
+		// send the new pose to the controller
+		
+		// make xml string with joint angles and IPOC
+		packXML( axis, ipoc );
+
+		if( send(ipoc) != ipoc.length() )
+		{
+		    std::cerr << "Incomplete send\n";
+		    m_error = true;
+		    break;
+		}
+
+	    }// while not ended
+
+	    // TODO soft stop, maybe interpolate to a pose close by?
+
+	    m_end = true;
+	}
+
+
+private:
+
+    int m_sockfd;
+    std::string m_port;
+    char m_buffer[MAXBUFLEN];
+    struct sockaddr_storage m_their_addr;
+    socklen_t m_addr_len;
+
+    std::thread m_thread;
+    std::atomic<bool> m_signal;
+    std::atomic<bool> m_end;
+    std::atomic<bool> m_error;
+
+    std::mutex m_mtx;
+    double m_pose[POSE_SZ];
+
+//////////////////////////////////////////////////////////////
+// format the xml for sending 
+/////////////////////////////////////////////////////////////
+
+
+    void packXML( const double axis[N_AXIS], std::string &IPOC )
+	{
+	    std::stringstream stream;
+	    stream << std::fixed << std::setprecision(4);
+
+	    // header
+	    stream << "<Sen Type=\"ImFree\">\n<AK ";
+	    // body
+	    for(int i = 1; i <= N_AXIS; ++i)
+		stream << "A" << i << "=\"" << axis[i-1] << "\" ";
+
+	    stream << "/>\n";
+
+	    // add ipoc, ack/timestamp
+	    stream << IPOC;
+
+	    stream << "\n</Sen>";
+	    
+	    IPOC = stream.str();
+	}
+
+//////////////////////////////////////////////////////////////
+// get the ACK to send back
+/////////////////////////////////////////////////////////////
+    
+    bool extractTimestamp( std::string &IPOC )
+	{
+
+	    std::regex rgx("<IPOC>\\d+<\\/IPOC>");
+	    std::cmatch match;
+
+	    
+	    if( std::regex_search( m_buffer, match, rgx ) )	   
+	    {
+		IPOC = match[0];
+		return true;
+	    }
+	    else
+		return false;
+
+	}
+
+//////////////////////////////////////////////////////////////
+// receive cstring from calling client via UDP
+/////////////////////////////////////////////////////////////
+    
     int receive()
 	{
 	    int numbytes;
@@ -136,6 +377,11 @@ public:
 
 	}
 
+//////////////////////////////////////////////////////////////
+// send cstring to calling client via UDP
+/////////////////////////////////////////////////////////////
+
+    
     int send( const std::string &msg )
 	{
 	    int numbytes;
@@ -152,6 +398,10 @@ public:
         
 	    return numbytes;
 	}
+
+//////////////////////////////////////////////////////////////
+// set up a UDP server on specified port 
+/////////////////////////////////////////////////////////////
 
 
     bool connect( std::string port )
@@ -188,7 +438,7 @@ public:
 
 	    if (p == NULL)
 	    {
-		std::cerr << "listener: failed to bind socket\n";
+		std::cerr << "failed to bind socket\n";
 		return false;
 	    }
 
@@ -200,147 +450,6 @@ public:
 	    return true;
 	    
 	}
-
-
-    void extractTimestamp( std::string &IPOC )
-	{
-
-	    std::regex rgx("<IPOC>\\d+<\\/IPOC>");
-	    std::cmatch match;
-
-	    
-	    if( std::regex_search( m_buffer, match, rgx ) )	   
-		IPOC = match[0];
-
-	}
-
-    bool setPose( std::vector<double> pose )
-	{
-	    std::lock_guard<std::mutex> lock(m_mtx);
-
-	    for (int i = 0; i < POSE_SZ; ++i)
-		m_pose[i] = pose.at(i);			    		    
-
-	    m_signal = true;
-
-	    return !m_error;
-	}
-    
-
-protected:
-
-    void RSIthreadFnc( )
-	{
-
-	    //////////////////////////////////////////////////////////////
-	    // set up communication
-	    if( !connect( m_port ) )
-		throw std::out_of_range( "Connection not established\n" );
-
-
-	    double newTime = (double)clock()/CLOCKS_PER_SEC;
-	    double oldTime = newTime;
-
-	    double currentPose[POSE_SZ];
-	    for (int i = 0; i < POSE_SZ; ++i)
-		currentPose[i] = home[i];
-
-	    double axis[N_AXIS];
-	    for (int i = 0; i < N_AXIS; ++i)
-		axis[i] = home_axis[i];
-
-	    
-	    while( !m_end )
-	    {
-		// wait for new RSI message
-		int nbytes = receive();
-		
-		newTime = (double)clock()/CLOCKS_PER_SEC;
-
-		if( nbytes < 1 )
-		{
-		    m_error = true;
-		    break;
-		}
-
-
-
-		// handle the IPOC
-		std::string ipoc = "";
-		extractTimestamp( ipoc );
-
-		if( ipoc.empty() )
-		{
-		    std::cerr << "IPOC error\n";
-		    m_error = true;
-		    break;
-		}
-
-
-		// check if pose has been updated
-		if( m_signal )
-		{	        
-		    std::lock_guard<std::mutex> lock(m_mtx);
-		    for (int i = 0; i < POSE_SZ; ++i)
-			currentPose[i] = m_pose[i];			    		    
-		}
-
-		// TODO: run update function to get an intermidiate pose
-
-		// TODO perform optional interpolation
-
-		// TODO perform inverse kinematics
-
-		// send xml string with joint angles and IPOC
-		packXML( axis, ipoc );
-		send(ipoc);
-
-		std::cout << "Time: " << newTime - oldTime << std::endl;
-		oldTime = newTime;
-	    }
-
-
-	}
-
-
-private:
-
-    int m_sockfd;
-    std::string m_port;
-    char m_buffer[MAXBUFLEN];
-    struct sockaddr_storage m_their_addr;
-    socklen_t m_addr_len;
-
-    std::thread m_thread;
-    std::atomic<bool> m_signal;
-    std::atomic<bool> m_end;
-    std::atomic<bool> m_error;
-
-    std::mutex m_mtx;
-    double m_pose[POSE_SZ];
-
-    void packXML( const double axis[N_AXIS], std::string &IPOC )
-	{
-	    std::stringstream stream;
-	    stream << std::fixed << std::setprecision(4);
-
-	    // header
-	    stream << "<Sen Type=\"ImFree\">\n<AK ";
-	    // body
-	    for(int i = 1; i <= N_AXIS; ++i)
-		stream << "A" << i << "=\"" << axis[i-1] << "\" ";
-
-	    stream << "/>\n";
-
-	    // add ipoc, ack/timestamp
-	    stream << IPOC;
-
-	    stream << "\n</Sen>";
-	    
-	    IPOC = stream.str();
-	}
-
-
     
 };
 
