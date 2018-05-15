@@ -25,6 +25,10 @@
 #include <thread>
 #include <atomic>
 #include <ctime>
+#include <mutex>
+#include <vector>
+#include <iomanip> // setprecision
+#include <sstream> // stringstream
 
 //////////////////////////////////////////////////////////////
 // config
@@ -33,11 +37,15 @@
 //#define MYPORT "4950"    // the port users will be connecting to
 #define _DEBUG_RSI_
 #define MAXBUFLEN 1024
+#define POSE_SZ 12
+#define N_AXIS 6
 
 namespace HH
 {
     // start pose: x,y,z,x_d,y_d,z_d,A,B,C,A_dot, B_dot, C_dot
-    const double home[12] = {1.35, 0, 1.569, 0, 0, 0, 0, 0, -3.1416, 0, 0, 0};
+    const double home[POSE_SZ] = {1.35, 0, 1.569, 0, 0, 0, 0, 0, -3.1416, 0, 0, 0};
+
+    const double home_axis[N_AXIS] = {0.0, -90.0, 90.0, 0.0, 90.0, 180.0};
 }
 
 
@@ -201,19 +209,18 @@ public:
 	    std::cmatch match;
 
 	    
-	    if( std::regex_search( m_buffer, match, rgx ) )
-	    {
+	    if( std::regex_search( m_buffer, match, rgx ) )	   
 		IPOC = match[0];
-
-//		int len = IPOC.length();
-//		std::string num = IPOC.substr(6, len-(6+7));
-		
-	    }
 
 	}
 
-    bool setPose( double pose[12] )
+    bool setPose( std::vector<double> pose )
 	{
+	    std::lock_guard<std::mutex> lock(m_mtx);
+
+	    for (int i = 0; i < POSE_SZ; ++i)
+		m_pose[i] = pose.at(i);			    		    
+
 	    m_signal = true;
 
 	    return !m_error;
@@ -234,9 +241,13 @@ protected:
 	    double newTime = (double)clock()/CLOCKS_PER_SEC;
 	    double oldTime = newTime;
 
-	    double currentPose[12];
-	    for (int i = 0; i < 12; ++i)
+	    double currentPose[POSE_SZ];
+	    for (int i = 0; i < POSE_SZ; ++i)
 		currentPose[i] = home[i];
+
+	    double axis[N_AXIS];
+	    for (int i = 0; i < N_AXIS; ++i)
+		axis[i] = home_axis[i];
 
 	    
 	    while( !m_end )
@@ -268,21 +279,20 @@ protected:
 
 		// check if pose has been updated
 		if( m_signal )
-		{
-		
-		    // TODO: send the newly acquired pose
+		{	        
+		    std::lock_guard<std::mutex> lock(m_mtx);
+		    for (int i = 0; i < POSE_SZ; ++i)
+			currentPose[i] = m_pose[i];			    		    
 		}
-		else
-		{
-		    // TODO: run update function to get an intermidiate pose
-		}
+
+		// TODO: run update function to get an intermidiate pose
 
 		// TODO perform optional interpolation
 
 		// TODO perform inverse kinematics
 
-		// TODO pack an xml string with joint angles and IPOC
-
+		// send xml string with joint angles and IPOC
+		packXML( axis, ipoc );
 		send(ipoc);
 
 		std::cout << "Time: " << newTime - oldTime << std::endl;
@@ -305,6 +315,33 @@ private:
     std::atomic<bool> m_signal;
     std::atomic<bool> m_end;
     std::atomic<bool> m_error;
+
+    std::mutex m_mtx;
+    double m_pose[POSE_SZ];
+
+    void packXML( const double axis[N_AXIS], std::string &IPOC )
+	{
+	    std::stringstream stream;
+	    stream << std::fixed << std::setprecision(4);
+
+	    // header
+	    stream << "<Sen Type=\"ImFree\">\n<AK ";
+	    // body
+	    for(int i = 1; i <= N_AXIS; ++i)
+		stream << "A" << i << "=\"" << axis[i-1] << "\" ";
+
+	    stream << "/>\n";
+
+	    // add ipoc, ack/timestamp
+	    stream << IPOC;
+
+	    stream << "\n</Sen>";
+	    
+	    IPOC = stream.str();
+	}
+
+
+    
 };
 
     

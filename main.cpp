@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 #include "rsi.h"
 
@@ -25,7 +26,9 @@ int main(int argc, char *argv[])
     sleep(5);
 
 
-    double pose[12] = {0};
+    std::vector<double> pose;
+    for (int i = 0; i < POSE_SZ; ++i)
+	pose.push_back(i);
 
     rsi.setPose( pose );
 
