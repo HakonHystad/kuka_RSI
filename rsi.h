@@ -179,10 +179,10 @@ protected:
     // Overload to get a custom implementation.
     // The format of currentPose is optional, but newPose must follow x,y,z,A,B,C
     // where x,y,z are in meters and A,B,C are kuka Euler angles (ZYX) in radians.
-    // Remember to handle the case if interval<1e6 s which means currentPose has been very recently refreshed.
+    // Remember to handle the case if interval<some s which means currentPose has been very recently refreshed. And update currentPose
     void update( double newPose[6], double currentPose[POSE_SZ], double interval )
 	{
-	    //  if( interval < 1e6 )
+	    //  if( interval < 1e-6 )
 	    {
 		// here it is assumed that currentPose has the linear and angular velocities as well:
 		// x,y,z,x_d,y_d,z_d,A,B,C,A_d,B_d,C_d

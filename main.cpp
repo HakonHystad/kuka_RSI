@@ -1,4 +1,5 @@
-#include "rsi.h"
+//#include "rsi.h"
+#include "sphericalPendulum.h"
 
 #include <iostream>
 #include <vector>
@@ -6,9 +7,9 @@
 
 int main( int argc, char** argv )
 {
-    HH::RSI rsi( "4950" );
+    HH::SphericalPendulum rsi( "4950" );
 
-    std::vector<double> start = {1.35092, 0, 1.784, 0, 0, 0, 0, -3.1415, 0, 0, 0, 0};
+    std::vector<double> start = {1.35092, 0, 1.784, 0.01, 0, 0, 0, -3.1415, 0, 0.0873, 0, 0};
 
     
     rsi.setPose( start );
