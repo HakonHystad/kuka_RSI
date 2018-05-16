@@ -8,6 +8,11 @@
 
 // Written in May 2018 by Håkon Hystad: hakonhystad@gmail.com
 
+/*
+ * WARNING:
+ * - The implementation has a minimal amount of safe guards and should be thoroughly tested.
+ */
+
 #ifndef _RSI_H_
 #define _RSI_H_
 
@@ -40,21 +45,25 @@
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
 
+#include "kinematics.h"// NB! dependency: orocos kdl library installed
+
 //////////////////////////////////////////////////////////////
 // config
 /////////////////////////////////////////////////////////////
 
 #define _DEBUG_RSI_
-#define MAXBUFLEN 1024
-#define POSE_SZ 12
-#define N_AXIS 6
+//#define _SOFT_STOP_HH_// repeats the last pose after ending so the manipulator can slow down
 
 namespace HH
 {
-    // start pose: x,y,z,x_d,y_d,z_d,A,B,C,A_dot, B_dot, C_dot
-    const double home[POSE_SZ] = {1.35, 0, 1.569, 0, 0, 0, 0, 0, -3.1416, 0, 0, 0};
+    
+    const int MAXBUFLEN = 1024;
+    const int POSE_SZ = 12;
+    const int N_AXIS = 6;
 
-    const double home_axis[N_AXIS] = {0.0, -90.0, 90.0, 0.0, 90.0, 180.0};
+    // default pose: x,y,z,x_d,y_d,z_d,A,B,C,A_dot, B_dot, C_dot
+    const double home_axis[N_AXIS] = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 3.1415926};
+    const Manip manipulator = HH::Manip::KR120;
 }
 
 
@@ -81,7 +90,7 @@ namespace HH
 
     /* 
      * NOTES:
-     * - Constructor will throw std::out_of_range if a UDP session can not be established 
+     * - RSI::start will throw std::out_of_range if a UDP session can not be established 
      */
 
 
@@ -114,6 +123,14 @@ public:
     
     void start()
 	{
+	    if( !m_signal )
+	    {
+		std::cerr << "Set pose before starting\n";
+		return;
+	    }
+	    else
+		m_signal = false;
+	    
 	    if( m_end )
 	    {
 		m_end = false;
@@ -161,11 +178,11 @@ protected:
     
     // Overload to get a custom implementation.
     // The format of currentPose is optional, but newPose must follow x,y,z,A,B,C
-    // where x,y,z are in mm and A,B,C are kuka Euler angles (ZYX) in degrees.
+    // where x,y,z are in meters and A,B,C are kuka Euler angles (ZYX) in radians.
     // Remember to handle the case if interval<1e6 s which means currentPose has been very recently refreshed.
     void update( double newPose[6], double currentPose[POSE_SZ], double interval )
 	{
-	    if( interval < 1e6 )
+	    //  if( interval < 1e6 )
 	    {
 		// here it is assumed that currentPose has the linear and angular velocities as well:
 		// x,y,z,x_d,y_d,z_d,A,B,C,A_d,B_d,C_d
@@ -203,13 +220,24 @@ protected:
 	    double newTime = (double)clock()/CLOCKS_PER_SEC;
 	    double oldTime = newTime;
 
-	    double currentPose[POSE_SZ];
-	    for (int i = 0; i < POSE_SZ; ++i)
-		currentPose[i] = home[i];
-
 	    double axis[N_AXIS];
+	    std::vector<double>q_h;
 	    for (int i = 0; i < N_AXIS; ++i)
+	    {
 		axis[i] = home_axis[i];
+		q_h.push_back( home_axis[i] );
+	    }
+
+	    HH::Kinematics kin( manipulator, q_h );
+	    
+	    double currentPose[POSE_SZ];
+
+	    std::string ipoc;
+
+	    std::unique_lock<std::mutex> lock(m_mtx);
+	    for (int i = 0; i < POSE_SZ; ++i)
+		currentPose[i] = m_pose[i];
+	    lock.unlock();
 
 	    //////////////////////////////////////////////////////////////
 	    // main loop
@@ -225,7 +253,7 @@ protected:
 		
 		//////////////////////////////////////////////////////////////
 		// extract ACK signal to send back
-		std::string ipoc;
+		ipoc.clear();
 
 		if( !extractTimestamp( ipoc ) )
 		{
@@ -241,11 +269,12 @@ protected:
 	        
 		if( m_signal )
 		{	        
-		    std::lock_guard<std::mutex> lock(m_mtx);
+		    lock.lock();
 		    for (int i = 0; i < POSE_SZ; ++i)
 			currentPose[i] = m_pose[i];
 		    m_signal = false;
 		    oldTime = newTime;
+		    lock.unlock();
 		}
 
 		//////////////////////////////////////////////////////////////
@@ -255,9 +284,9 @@ protected:
 		update( sendPose, currentPose, newTime - oldTime );
 		oldTime = newTime;
 
-		
-
-		// TODO perform inverse kinematics
+	        //////////////////////////////////////////////////////////////
+		// perform inverse kinematics
+		kin.ik( sendPose, axis );
 
 		//////////////////////////////////////////////////////////////
 		// send the new pose to the controller
@@ -272,7 +301,17 @@ protected:
 
 	    }// while not ended
 
+#ifdef _SOFT_STOP_HH_  
 	    // TODO soft stop, maybe repeat the last pose a couple times
+	    for (int i = 0; i < 250; ++i)
+	    {
+		if( receive()<1 )
+		    break;
+		extractTimestamp( ipoc );
+		packXML( axis, ipoc );// make xml string with joint angles and IPOC
+		send(ipoc);
+	    }
+#endif
 
 	    m_end = true;
 	}
@@ -362,7 +401,7 @@ private:
 	    
 	    std::cout << "Got packet from " << inet_ntop(m_their_addr.ss_family, get_in_addr((struct sockaddr *)&m_their_addr), s, sizeof( s )) << std::endl;
   
-	    std::cout << "It is " << numbytes << " bytes and contains\n\t";
+	    std::cout << "It is " << numbytes << " bytes and contains\n";
 	    std::cout << " \" " << m_buffer << " \" " << std::endl;
 #endif
 
@@ -387,7 +426,7 @@ private:
 		perror("sendto");
 
 #ifdef _DEBUG_RSI_
-	    std::cout << "sent " << numbytes << " of " << len << " bytes:\n\t \" "
+	    std::cout << "sent " << numbytes << " of " << len << " bytes:\n \" "
 		      << msg.substr(0,numbytes) << " \" " << std::endl;
 #endif
         
