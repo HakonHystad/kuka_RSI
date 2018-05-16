@@ -6,9 +6,12 @@
 #include <valarray>
 
 
-namespace PARAMETER
+namespace PARAMETER// temp solution
 {
-    const double LENGTH = 1;// temp
+    const double LENGTH = 1;
+    const double THETA_ALPHA = 0;
+    const double THETA_BETA = 0;
+
 }
 
 
@@ -25,49 +28,10 @@ public:
     ~SphericalPendulum()
 	{}
 
-    void update( double newPose[6], double currentPose[POSE_SZ], double interval )
-	{
-	    double stepSz = 1e-4;
-	    //////////////////////////////////////////////////////////////
-	    // if new pose was given recently, just resend is
-	    if( interval < stepSz )
-		goto done;
-
-	    //////////////////////////////////////////////////////////////
-	    // else integrate previous pose with the dynamic equations
-
-	    std::valarray<double> Y(POSE_SZ);
-
-	    // initial values
-	    for (int i = 0; i < POSE_SZ; ++i)
-		Y[i] = currentPose[i];
-
-	    int n_steps = interval/stepSz;
-
-	    double x = 0;
-	    for (int i = 0; i < n_steps; ++i)
-	    {
-		step( stepSz, x, Y ); 
-	    }
-
-	    for (int i = 0; i < POSE_SZ; ++i)
-	    {
-		currentPose[i] = Y[i];
-
-		#ifdef _DEBUG_RSI_
-		std::cout << currentPose[i] << " ";
-		#endif
-	    }
-	    #ifdef _DEBUG_RSI_
-	    std::cout << std::endl;
-	    #endif
-	done:
-	    
-	    for(int i = 0; i < 3; ++i)
-		newPose[i] = currentPose[i];
-
-	    XYZ_to_ZYX( &currentPose[6], &newPose[3] );
-	}
+    
+//////////////////////////////////////////////////////////////
+// convert between euler conventions
+/////////////////////////////////////////////////////////////
 
     void XYZ_to_ZYX( const double in[3], double out[3] )
 	{
@@ -96,6 +60,54 @@ public:
 
 
 protected:
+    virtual void update( double newPose[6], double currentPose[POSE_SZ], double interval )
+	{
+	    const double stepSz = 1e-4;
+	    
+	    
+	    //////////////////////////////////////////////////////////////
+	    // if new pose was given recently, just resend is
+	    if( interval > stepSz )
+	    {
+
+		//////////////////////////////////////////////////////////////
+		// else integrate previous pose with the dynamic equations
+
+		currentPose[6] += PARAMETER::THETA_ALPHA;
+		currentPose[7] += PARAMETER::THETA_BETA;
+
+
+
+		int n_steps = interval/stepSz;
+		double x = 0;
+		std::valarray<double> Y(POSE_SZ);
+
+
+		// initial values
+		for (int i = 0; i < POSE_SZ; ++i)
+		    Y[i] = currentPose[i];
+
+
+		for (int i = 0; i < n_steps; ++i)
+		{
+		    step( stepSz, x, Y ); 
+		}
+
+		for (int i = 0; i < POSE_SZ; ++i)
+		    currentPose[i] = Y[i];
+		
+		currentPose[6] -= PARAMETER::THETA_ALPHA;
+		currentPose[7] -= PARAMETER::THETA_BETA;
+
+	    }
+
+	    
+	    for(int i = 0; i < 3; ++i)
+		newPose[i] = currentPose[i];
+
+	    XYZ_to_ZYX( &currentPose[6], &newPose[3] );
+	}
+
 
 private:
 

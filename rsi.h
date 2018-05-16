@@ -39,7 +39,7 @@
 #include <regex>
 #include <thread>
 #include <atomic>
-#include <ctime>
+#include <sys/time.h>
 #include <mutex>
 #include <vector>
 #include <iomanip> // setprecision
@@ -80,6 +80,26 @@ void *get_in_addr(struct sockaddr *sa)
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
+
+double get_current_time()
+{
+   static int start = 0, startu = 0;
+   struct timeval tval;
+   double result;
+
+   if (gettimeofday(&tval, NULL) == -1)
+      result = -1.0;
+   else if(!start) {
+      start = tval.tv_sec;
+      startu = tval.tv_usec;
+      result = 0.0;
+   }
+   else
+      result = (double) (tval.tv_sec - start) + 1.0e-6*(tval.tv_usec - startu);
+
+   return result;
+}
+
 
 namespace HH
 {
@@ -128,12 +148,11 @@ public:
 		std::cerr << "Set pose before starting\n";
 		return;
 	    }
-	    else
-		m_signal = false;
 	    
 	    if( m_end )
 	    {
 		m_end = false;
+		m_signal = false;
 		m_thread = std::thread( [this] { RSIthreadFnc(); } );
 	    }
 	    else
@@ -180,8 +199,9 @@ protected:
     // The format of currentPose is optional, but newPose must follow x,y,z,A,B,C
     // where x,y,z are in meters and A,B,C are kuka Euler angles (ZYX) in radians.
     // Remember to handle the case if interval<some s which means currentPose has been very recently refreshed. And update currentPose
-    void update( double newPose[6], double currentPose[POSE_SZ], double interval )
+    virtual void update( double newPose[6], double currentPose[POSE_SZ], double interval )
 	{
+	    std::cout << "Using default update" << std::endl;
 	    //  if( interval < 1e-6 )
 	    {
 		// here it is assumed that currentPose has the linear and angular velocities as well:
@@ -217,7 +237,7 @@ protected:
 	    // initialize
 	    m_error = false;
 	    m_end = false;
-	    double newTime = (double)clock()/CLOCKS_PER_SEC;
+	    double newTime = get_current_time();
 	    double oldTime = newTime;
 
 	    double axis[N_AXIS];
@@ -229,6 +249,7 @@ protected:
 	    }
 
 	    HH::Kinematics kin( manipulator, q_h );
+
 	    
 	    double currentPose[POSE_SZ];
 
@@ -265,8 +286,8 @@ protected:
 
 		//////////////////////////////////////////////////////////////
 		// refresh with new pose if one is given
-		newTime = (double)clock()/CLOCKS_PER_SEC;
-	        
+		newTime = get_current_time();
+		
 		if( m_signal )
 		{	        
 		    lock.lock();
@@ -284,9 +305,22 @@ protected:
 		update( sendPose, currentPose, newTime - oldTime );
 		oldTime = newTime;
 
+#ifdef _DEBUG_RSI_
+		std::cout << "\nNew pose:\n";
+		for (int i = 0; i < 6; ++i)
+		    std::cout << sendPose[i] << " ";
+		std::cout << "\n\n";
+#endif
+		
 	        //////////////////////////////////////////////////////////////
 		// perform inverse kinematics
-		kin.ik( sendPose, axis );
+		if( !kin.ik( sendPose, axis ) )
+		{
+		    std::cerr << "No solution to inverse kinematics\n";
+		    m_error = true;
+		    break;
+		}
+
 
 		//////////////////////////////////////////////////////////////
 		// send the new pose to the controller
@@ -347,7 +381,7 @@ private:
 	    stream << "<Sen Type=\"ImFree\">\n<AK ";
 	    // body
 	    for(int i = 1; i <= N_AXIS; ++i)
-		stream << "A" << i << "=\"" << axis[i-1] << "\" ";
+		stream << "A" << i << "=\"" << axis[i-1]*57.295779513 << "\" ";
 
 	    stream << "/>\n";
 
