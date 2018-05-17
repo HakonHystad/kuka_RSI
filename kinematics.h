@@ -153,13 +153,23 @@ public:
     void setKR120( std::vector<double> base, std::vector<double> tool )
 	{
 	    m_chain = Chain();
+
+	    Rotation baseRot = Rotation::EulerZYX( base.at(3), base.at(4), base.at(5) );
+	    Vector baseVec = Vector( base.at(0), base.at(1), base.at(2) );
+	    m_chain.addSegment(Segment("base", Joint(), Frame( baseRot, baseVec ) ) );
+
 	    
-	    m_chain.addSegment(Segment("link1",Joint( "joint_a1", Vector(0,0,0.675), Vector(0,0,-1), Joint::RotAxis ), Frame( Vector( 0,0,0.675 ) ) ) );
+	    m_chain.addSegment(Segment("link1",Joint( "joint_a1", Vector(0,0,0.675), Vector(0,0,-1), Joint::RotAxis ), Frame( Vector(0,0,0.675) ) ) );
 	    m_chain.addSegment(Segment("link2",Joint( "joint_a2", Vector(0.35,0,0), Vector(0,1,0), Joint::RotAxis ), Frame( Vector( 0.35,0,0 ) ) ) );
 	    m_chain.addSegment(Segment("link3",Joint( "joint_a3", Vector(1.15,0,0), Vector(0,1,0), Joint::RotAxis ), Frame( Vector( 1.15,0,0 ) ) ) );
 	    m_chain.addSegment(Segment("link4",Joint( "joint_a4", Vector(1,0,-0.041), Vector(-1,0,0),  Joint::RotAxis ), Frame( Vector( 1,0,-0.041 ) ) ) );
 	    m_chain.addSegment(Segment("link5",Joint( "joint_a5", Vector(0,0,0), Vector(0,1,0),  Joint::RotAxis ), Frame( Vector( 0,0,0 ) ) ) );
 	    m_chain.addSegment(Segment("link6",Joint( "joint_a6", Vector(0,0,0), Vector(-1,0,0), Joint::RotAxis ), Frame( Vector( 0,0,0 ) ) ) );
+
+	    
+	    Rotation toolRot = Rotation::EulerZYX( tool.at(3), tool.at(4), tool.at(5) );
+	    Vector toolVec = Vector( tool.at(0), tool.at(1), tool.at(2) );
+	    m_chain.addSegment(Segment("tool", Joint(), Frame( toolRot, toolVec ) ) );
 
 	    const double lower[6] = {-3.22885911619, -2.70526034059, -2.26892802759, -6.10865238198, -2.26892802759, -6.10865238198};
 	    const double upper[6] = {3.22885911619, 0.610865238198, 2.68780704807, 6.10865238198, 2.26892802759, 6.10865238198};
@@ -176,12 +186,20 @@ public:
 	{
 	    m_chain = Chain();
 	    
+	    Rotation baseRot = Rotation::EulerZYX( base.at(3), base.at(4), base.at(5) );
+	    Vector baseVec = Vector( base.at(0), base.at(1), base.at(2) );
+	    m_chain.addSegment(Segment("base", Joint(), Frame( baseRot, baseVec ) ) );
+	   
 	    m_chain.addSegment(Segment("link1",Joint( "joint_a1", Vector(0,0,0.4), Vector(0,0,-1), Joint::RotAxis ), Frame( Vector( 0,0,0.4 ) ) ) );
 	    m_chain.addSegment(Segment("link2",Joint( "joint_a2", Vector(0.025,0,0), Vector(0,1,0), Joint::RotAxis ), Frame( Vector( 0.025,0,0 ) ) ) );
 	    m_chain.addSegment(Segment("link3",Joint( "joint_a3", Vector(0.455,0,0), Vector(0,1,0), Joint::RotAxis ), Frame( Vector( 0.455,0,0 ) ) ) );
 	    m_chain.addSegment(Segment("link4",Joint( "joint_a4", Vector(0,0,0.035), Vector(-1,0,0),  Joint::RotAxis ), Frame( Vector( 0,0,0.035 ) ) ) );
 	    m_chain.addSegment(Segment("link5",Joint( "joint_a5", Vector(0.42,0,0), Vector(0,1,0),  Joint::RotAxis ), Frame( Vector( 0.42,0,0 ) ) ) );
 	    m_chain.addSegment(Segment("link6",Joint( "joint_a6", Vector(0.08,0,0), Vector(-1,0,0), Joint::RotAxis ), Frame( Vector( 0.08,0,0 ) ) ) );
+
+	     Rotation toolRot = Rotation::EulerZYX( tool.at(3), tool.at(4), tool.at(5) );
+	    Vector toolVec = Vector( tool.at(0), tool.at(1), tool.at(2) );
+	    m_chain.addSegment(Segment("tool", Joint(), Frame( toolRot, toolVec ) ) );
 
 	    const double lower[6] = {-2.96705972839, -3.31612557879, -2.09439510239, -3.22885911619, -2.09439510239, -6.10865238198};
 	    const double upper[6] = {2.96705972839, 0.785398163397, 2.72271363311, 3.22885911619, 2.09439510239, 6.10865238198};
