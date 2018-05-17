@@ -7,11 +7,13 @@
 
 int main( int argc, char** argv )
 {
-    HH::SphericalPendulum rsi( "4950" );
 
     std::vector<double> start = {1.35092, 0, 1.784, 0.01, 0, 0, -0.0015, 0.0274, 0.0549, 0.0873, -0.0873, 0};
 
-    rsi.setPose( start );
+    std::vector<double> base = {0,0,0,0,0,0};
+    std::vector<double> tool = base;
+    HH::SphericalPendulum rsi( start, HH::home_axis_kr120, base, tool, HH::Manip::KR120, "4950" );
+
     
     rsi.start();
 

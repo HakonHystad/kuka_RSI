@@ -22,8 +22,8 @@ class SphericalPendulum : public RSI
 {
 
 public:
-    SphericalPendulum( std::string port )
-	: RSI( port )
+    SphericalPendulum( std::vector<double> startPose, std::vector<double> q_home, std::vector<double> base, std::vector<double> tool, HH::Manip manipulator, std::string port )
+	: RSI( startPose, q_home, base, tool,  manipulator, port )
 	{}
     ~SphericalPendulum()
 	{}
@@ -60,7 +60,7 @@ public:
 
 
 protected:
-    virtual void update( double newPose[6], double currentPose[POSE_SZ], double interval )
+    virtual void update( double newPose[6], std::vector<double> &currentPose, double interval )
 	{
 	    const double stepSz = 1e-4;
 	    
@@ -80,7 +80,10 @@ protected:
 
 		int n_steps = interval/stepSz;
 		double x = 0;
-		std::valarray<double> Y(POSE_SZ);
+
+		const int POSE_SZ = currentPose.size();
+		
+		std::valarray<double> Y( POSE_SZ );
 
 
 		// initial values

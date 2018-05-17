@@ -58,12 +58,9 @@ namespace HH
 {
     
     const int MAXBUFLEN = 1024;
-    const int POSE_SZ = 12;
-    const int N_AXIS = 6;
 
-    // default pose: x,y,z,x_d,y_d,z_d,A,B,C,A_dot, B_dot, C_dot
-    const double home_axis[N_AXIS] = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 3.1415926};
-    const Manip manipulator = HH::Manip::KR120;
+    const std::vector<double> home_axis_kr120 = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 3.1415926};
+
 }
 
 
@@ -118,13 +115,17 @@ class RSI
 {
 
 public:
-    RSI( std::string port )
+    // startPose can have any format as long as update(..) is overridden accordigly
+    // base and tool are x,y,z in meters and A,B,C in ZYX euler angles (radians)
+    RSI( std::vector<double> startPose, std::vector<double> q_home, std::vector<double> base, std::vector<double> tool, HH::Manip manipulator, std::string port )
 	: m_port( port ),
 	  m_signal( false ),
 	  m_end( true ),
-	  m_error( false )
+	  m_error( false ),
+	  m_kin( base, tool, manipulator, q_home ),
+	  m_pose( startPose )
 	{
-	    
+	    this->n_joints = q_home.size();
 	}
 
 
@@ -143,11 +144,6 @@ public:
     
     void start()
 	{
-	    if( !m_signal )
-	    {
-		std::cerr << "Set pose before starting\n";
-		return;
-	    }
 	    
 	    if( m_end )
 	    {
@@ -178,8 +174,13 @@ public:
 	{
 	    std::lock_guard<std::mutex> lock(m_mtx);
 
-	    for (int i = 0; i < POSE_SZ; ++i)
-		m_pose[i] = pose.at(i);			    		    
+	    if( pose.size() == m_pose.size() )
+		m_pose = pose;
+	    else
+	    {
+		std::cerr << "Invalid pose format\n";
+		return false;
+	    }
 
 	    m_signal = true;
 
@@ -199,7 +200,7 @@ protected:
     // The format of currentPose is optional, but newPose must follow x,y,z,A,B,C
     // where x,y,z are in meters and A,B,C are kuka Euler angles (ZYX) in radians.
     // Remember to handle the case if interval<some s which means currentPose has been very recently refreshed. And update currentPose
-    virtual void update( double newPose[6], double currentPose[POSE_SZ], double interval )
+    virtual void update( double newPose[6], std::vector<double> &currentPose, double interval )
 	{
 	    std::cout << "Using default update" << std::endl;
 	    //  if( interval < 1e-6 )
@@ -213,8 +214,6 @@ protected:
 		    newPose[i+3] = currentPose[i+6];
 		return;
 	    }
-
-	    // TODO implement RK4
 
 	    
 	}
@@ -240,24 +239,14 @@ protected:
 	    double newTime = get_current_time();
 	    double oldTime = newTime;
 
-	    double axis[N_AXIS];
-	    std::vector<double>q_h;
-	    for (int i = 0; i < N_AXIS; ++i)
-	    {
-		axis[i] = home_axis[i];
-		q_h.push_back( home_axis[i] );
-	    }
+	    double *axis = new double[ this->n_joints ];
 
-	    HH::Kinematics kin( manipulator, q_h );
-
-	    
-	    double currentPose[POSE_SZ];
+	    m_kin.getJoints( axis );
 
 	    std::string ipoc;
 
 	    std::unique_lock<std::mutex> lock(m_mtx);
-	    for (int i = 0; i < POSE_SZ; ++i)
-		currentPose[i] = m_pose[i];
+	    std::vector<double> currentPose = m_pose;
 	    lock.unlock();
 
 	    //////////////////////////////////////////////////////////////
@@ -291,8 +280,7 @@ protected:
 		if( m_signal )
 		{	        
 		    lock.lock();
-		    for (int i = 0; i < POSE_SZ; ++i)
-			currentPose[i] = m_pose[i];
+		    currentPose = m_pose;
 		    m_signal = false;
 		    oldTime = newTime;
 		    lock.unlock();
@@ -314,7 +302,7 @@ protected:
 		
 	        //////////////////////////////////////////////////////////////
 		// perform inverse kinematics
-		if( !kin.ik( sendPose, axis ) )
+		if( !m_kin.ik( sendPose, axis ) )
 		{
 		    std::cerr << "No solution to inverse kinematics\n";
 		    m_error = true;
@@ -347,6 +335,7 @@ protected:
 	    }
 #endif
 
+	    delete [] axis;
 	    m_end = true;
 	}
 
@@ -365,14 +354,18 @@ private:
     std::atomic<bool> m_error;
 
     std::mutex m_mtx;
-    double m_pose[POSE_SZ];
+    std::vector<double> m_pose;
+    int n_joints;
+
+    
+    HH::Kinematics m_kin;
 
 //////////////////////////////////////////////////////////////
 // format the xml for sending 
 /////////////////////////////////////////////////////////////
 
 
-    void packXML( const double axis[N_AXIS], std::string &IPOC )
+    void packXML( const double axis[], std::string &IPOC )
 	{
 	    std::stringstream stream;
 	    stream << std::fixed << std::setprecision(4);
@@ -380,7 +373,7 @@ private:
 	    // header
 	    stream << "<Sen Type=\"ImFree\">\n<AK ";
 	    // body
-	    for(int i = 1; i <= N_AXIS; ++i)
+	    for(int i = 1; i <= n_joints; ++i)
 		stream << "A" << i << "=\"" << axis[i-1]*57.295779513 << "\" ";
 
 	    stream << "/>\n";

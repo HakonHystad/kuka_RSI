@@ -31,16 +31,16 @@ public:
 	    // empty
 	}
     
-    Kinematics( const Manip manipulator, const std::vector<double> &q_home )
+    Kinematics( std::vector<double> base, std::vector<double> tool, const Manip manipulator, const std::vector<double> &q_home )
 	: Kinematics()
 	{
 	    switch( manipulator )
 	    {
 	    case KR120:
-		setKR120();
+		setKR120(base, tool);
 		break;
 	    case KR6:
-		setKR6();
+		setKR6(base, tool);
 		break;
 	    }
 
@@ -150,7 +150,7 @@ public:
 // use kinamatics for kuka kr120
 /////////////////////////////////////////////////////////////
 
-    void setKR120()
+    void setKR120( std::vector<double> base, std::vector<double> tool )
 	{
 	    m_chain = Chain();
 	    
@@ -172,7 +172,7 @@ public:
 // use kinamatics for kuka kr6
 /////////////////////////////////////////////////////////////
     
-    void setKR6()
+    void setKR6( std::vector<double> base, std::vector<double> tool )
 	{
 	    m_chain = Chain();
 	    
