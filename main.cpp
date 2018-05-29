@@ -44,6 +44,7 @@ int main( int argc, char** argv )
     for (int i = 0; i <= timeOfPath/0.1; ++i)
     {
 	ramp( start, end, pose, i*0.1, timeOfPath );
+
 	rsi.setPose( pose );
 	sleep(0.1);
     }
@@ -54,13 +55,16 @@ int main( int argc, char** argv )
     return 0;
 }
 
-double cubic( a0, qf, t, tf )
+double cubic( double a0, double qf, double t, double tf )
 {
+    double r = t/tf;
+    double q = a0-qf;
     // a1 = 0
-    double a2 = -1.5*( qf - a0 )/( (tf-1.5)*tf );
-    double a3 = ( qf - a0 )/( (tf-1.5)*tf*tf );
-
-    return (a3*t*t*t + a2*t*t + a0);
+    //double a2 = -3*( a0 -qf )/(tf*tf);
+    //double a3 = 2*( a0 - qf )/(tf*tf*tf);
+    //a3*t*t*t + a2*t*t + a1*t + a0;
+    
+    return (2*q*r*r*r -3*q*r*r + a0);
 }
 
 
