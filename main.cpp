@@ -41,7 +41,7 @@ int main( int argc, char** argv )
     double timeOfPath = 5;// s
 
     // send in intervals of 0.1s
-    for (int i = 0; i < timeOfPath/0.1; ++i)
+    for (int i = 0; i <= timeOfPath/0.1; ++i)
     {
 	ramp( start, end, pose, i*0.1, timeOfPath );
 	rsi.setPose( pose );
