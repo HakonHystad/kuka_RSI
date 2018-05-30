@@ -1,7 +1,7 @@
 EXE=com.out
 objects= build/main.o
 
-LIBS = -lpthread -I/usr/local/include/eigen3 -lorocos-kdl
+LIBS = -lpthread -I/usr/include/eigen3 -lorocos-kdl
 CXX = g++
 CXXFLAGS = --std=c++11
 

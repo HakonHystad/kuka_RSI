@@ -63,7 +63,7 @@ namespace HH
     
     const int MAXBUFLEN = 1024;
 
-    const std::vector<double> home_axis_kr120 = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 3.1415926};
+    const std::vector<double> home_axis_kr120 = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 0};//3.1415926};
 
 }
 
@@ -107,7 +107,9 @@ public:
 	  m_signal( false ),
 	  m_end( true ),
 	  m_error( false ),
+          m_ready(false),
 	  m_kin( base, tool, manipulator, q_home ),
+          m_home( q_home ),
 	  m_pose( startPose )
 	{
 	    this->n_joints = q_home.size();
@@ -172,6 +174,11 @@ public:
 	    return !m_error;
 	}
 
+    bool isReady()
+    {
+      return m_ready;
+    }
+
 
     
 
@@ -187,7 +194,7 @@ protected:
     // Remember to handle the case if interval<some s which means currentPose has been very recently refreshed. And update currentPose
     virtual void update( double newPose[6], std::vector<double> &currentPose, double interval )
 	{
-	    std::cout << "Using default update" << std::endl;
+	  //	    std::cout << "Using default update" << std::endl;
 	    //  if( interval < 1e-6 )
 	    {
 		// here it is assumed that currentPose has the linear and angular velocities as well:
@@ -231,7 +238,13 @@ protected:
 	    double *prev_axis = new double[ this->n_joints ];
 
 	    m_kin.getJoints( axis );
-
+	    /*
+	    double test[6];
+	    m_kin.fk(test);
+	    for(int i = 0; i<6; i++)
+	      std::cout << test[i] << " ";
+	    std::cout << std::endl;
+	    */
 	    std::string ipoc;
 
 	    std::unique_lock<std::mutex> lock(m_mtx);
@@ -251,6 +264,7 @@ protected:
 		    m_error = true;
 		    break;
 		}
+		m_ready = true;
 		
 		//////////////////////////////////////////////////////////////
 		// extract ACK signal to send back
@@ -304,7 +318,9 @@ protected:
 		    break;
 		}
 
-
+		for( int i = 0; i<this->n_joints; ++i )		  
+		  axis[i] -= m_home[i];
+		  
 		//////////////////////////////////////////////////////////////
 		// send the new pose to the controller
 		packXML( axis, ipoc );// make xml string with joint angles and IPOC
@@ -321,6 +337,7 @@ protected:
 #ifdef _DEBUG_RSI_
 	    std::cout << "Ended RSI, slowing down\n";
 #endif
+	    m_ready = false;
 
 	    //////////////////////////////////////////////////////////////
 	    // slow down the joints to a soft stop
@@ -379,9 +396,11 @@ private:
     std::atomic<bool> m_signal;
     std::atomic<bool> m_end;
     std::atomic<bool> m_error;
+    std::atomic<bool> m_ready;
 
     std::mutex m_mtx;
     std::vector<double> m_pose;
+    const std::vector<double> m_home;
     int n_joints;
 
     

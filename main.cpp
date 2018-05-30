@@ -12,45 +12,49 @@ void ramp( const std::vector<double> &pos1, const std::vector<double> &pos2, std
 int main( int argc, char** argv )
 {
 
-/* // default base
+  // default base
     std::vector<double> base = {0,0,0,0,0,0};
     std::vector<double> tool = {0,0,0,0,0,0};
-
+    /*
     std::vector<double> start = {1.35092, 0, 1.784, 0.01, 0, 0, -0.0015, 0.0274, 0.0549, 0.0873, -0.0873, 0};
     HH::SphericalPendulum rsi( start, HH::home_axis_kr120, base, tool, HH::Manip::KR120, "4950" );
 */
 
 // new base
-
+/*
     std::vector<double> base = {0,0,0,-3.141592/2,0,0};
     std::vector<double> tool = {0,0,0,0,0,0};
-
-    std::vector<double> start = {1.35092, 0, 1.784, 0, 0, 0, 3.141592, 3.141592/2, 0, 0, 0, 0};
+*/
+    std::vector<double> start = {1.35, 0, 1.784, 0, 0, 0, 3.141592, 3.141592/2, 3.141592};//{1.350, 0, 1.568, 0, 0, 0, -3.141592, 0, -3.141592, 0, 0, 0};
     auto end = start;
-    end.at(1) += 0.5;
+    end.at(1) += 0.1;
     
     auto home_axis = HH::home_axis_kr120;
-    home_axis.at(0) -= 3.141592/2;
+
     
-    HH::RSI rsi( start, home_axis, base, tool, HH::Manip::KR120, "4950" );
+    HH::RSI rsi( start, home_axis, base, tool, HH::Manip::KR120, "49001" );
     
     rsi.start();
-    sleep(5);
+
+    while( !rsi.isReady() )
+      {}
+    std::cout << "Ready!\n";
     
     auto pose = start;
 
-    double timeOfPath = 5;// s
+    double timeOfPath = 10;// s
 
     // send in intervals of 0.1s
     for (int i = 0; i <= timeOfPath/0.1; ++i)
     {
 	ramp( start, end, pose, i*0.1, timeOfPath );
-
+	//	std::cout << "____________________________________________:::: " << i << "::::_____________________________________________" << std::endl;
 	rsi.setPose( pose );
-	sleep(0.1);
-	std::cout << "set pose: " << pose[0] << " " << pose[1] << " " << pose[2] << std::endl;
+	sleep(1);
+	
+	//	std::cout << "set pose: " << pose[0] << " " << pose[1] << " " << pose[2] << std::endl;
     }
-
+    sleep(10);
     rsi.end();
 
     sleep(5);
