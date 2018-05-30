@@ -54,7 +54,7 @@
 // config
 /////////////////////////////////////////////////////////////
 
-#define _DEBUG_RSI_
+//#define _DEBUG_RSI_
 #define _SOFT_STOP_HH_ 2// continues n seconds after ending to slow down
 
 
@@ -255,8 +255,10 @@ protected:
 	    // main loop
 	    while( !m_end )
 	    {
-
-		m_kin.getJoints( prev_axis  );
+		oldTime = newTime;
+//		m_kin.getJoints( prev_axis  );
+		for( int i = 0; i<this->n_joints; ++i )
+		    prev_axis[i] = axis[i];
 		//////////////////////////////////////////////////////////////
 		// wait for until controller needs new update
 		if( receive() < 1 )
@@ -295,9 +297,9 @@ protected:
 		//////////////////////////////////////////////////////////////
 		// get intermidiate pose
 		double sendPose[6];// x,y,z,A,B,C
-		duration = std::chrono::duration_cast<std::chrono::seconds>(newTime - oldTime);
+		duration = std::chrono::duration_cast<std::chrono::microseconds>(newTime - oldTime);
 		update( sendPose, currentPose, duration.count() );
-		oldTime = newTime;
+
 				
 
 #ifdef _DEBUG_RSI_
@@ -318,8 +320,8 @@ protected:
 		    break;
 		}
 
-		for( int i = 0; i<this->n_joints; ++i )		  
-		  axis[i] -= m_home[i];
+		for( int i = 0; i<this->n_joints; ++i )
+		    axis[i] -= m_home[i];
 		  
 		//////////////////////////////////////////////////////////////
 		// send the new pose to the controller
@@ -347,14 +349,17 @@ protected:
 
 		const double period = duration.count();
 		
+		std::cout << prev_axis[0] << " " << prev_axis[1] << " " << prev_axis[2] << " " << prev_axis[3] << " " << prev_axis[4] << " " << prev_axis[5] << " " << std::endl;
 		for(int i = 0; i < this->n_joints; ++i)
 		{
 		    // find out how fast the joint is moving ca
 		    prev_axis[i] = ( axis[i] - prev_axis[i] )/period;// rad/s
 		}
+		std::cout << axis[0] << " " << axis[1] << " " << axis[2] << " " << axis[3] << " " << axis[4] << " " << axis[5] << " " << std::endl;
+		std::cout << prev_axis[0] << " " << prev_axis[1] << " " << prev_axis[2] << " " << prev_axis[3] << " " << prev_axis[4] << " " << prev_axis[5] << " " << std::endl;
 		const int tf = _SOFT_STOP_HH_/period;
 		double *new_axis = new double[ this->n_joints ];
-		std::cout << period << " " << tf << std::endl;
+
 		for (int i = 0; i < tf; ++i)
 		{
 		    if( receive()<1 )
@@ -362,7 +367,7 @@ protected:
 		    extractTimestamp( ipoc );
 		    // ramp down speed and acceleration by a cubic polynomial
 		    ramp( axis, prev_axis, i*period, _SOFT_STOP_HH_, new_axis );
-		    std::cout << axis[0] << std::endl;
+		    std::cout << new_axis[0] << " " << new_axis[1] << " " << new_axis[2] << " " << new_axis[3] << " " << new_axis[4] << " " << new_axis[5] << " " << std::endl;
 		    
 		    packXML( new_axis, ipoc );// make xml string with joint angles and IPOC
 		    send(ipoc);
