@@ -53,7 +53,7 @@ int main( int argc, char** argv )
 
     rsi.end();
 
-    sleep(60);
+    sleep(5);
     
     return 0;
 }
