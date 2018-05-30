@@ -35,7 +35,8 @@ int main( int argc, char** argv )
     HH::RSI rsi( start, home_axis, base, tool, HH::Manip::KR120, "4950" );
     
     rsi.start();
-
+    sleep(5);
+    
     auto pose = start;
 
     double timeOfPath = 5;// s
@@ -47,10 +48,12 @@ int main( int argc, char** argv )
 
 	rsi.setPose( pose );
 	sleep(0.1);
+	std::cout << "set pose: " << pose[0] << " " << pose[1] << " " << pose[2] << std::endl;
     }
-    
 
     rsi.end();
+
+    sleep(60);
     
     return 0;
 }

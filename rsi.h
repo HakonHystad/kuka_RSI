@@ -44,6 +44,9 @@
 #include <vector>
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
+#include <chrono>
+#include <ctime>
+#include <ratio>
 
 #include "kinematics.h"// NB! dependency: orocos kdl library installed
 
@@ -52,7 +55,8 @@
 /////////////////////////////////////////////////////////////
 
 #define _DEBUG_RSI_
-//#define _SOFT_STOP_HH_// repeats the last pose after ending so the manipulator can slow down
+#define _SOFT_STOP_HH_ 2// continues n seconds after ending to slow down
+
 
 namespace HH
 {
@@ -76,25 +80,6 @@ void *get_in_addr(struct sockaddr *sa)
     }
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
-
-double get_current_time()
-{
-   static int start = 0, startu = 0;
-   struct timeval tval;
-   double result;
-
-   if (gettimeofday(&tval, NULL) == -1)
-      result = -1.0;
-   else if(!start) {
-      start = tval.tv_sec;
-      startu = tval.tv_usec;
-      result = 0.0;
-   }
-   else
-      result = (double) (tval.tv_sec - start) + 1.0e-6*(tval.tv_usec - startu);
-
-   return result;
 }
 
 
@@ -236,10 +221,14 @@ protected:
 	    // initialize
 	    m_error = false;
 	    m_end = false;
-	    double newTime = get_current_time();
-	    double oldTime = newTime;
 
+	    auto newTime = std::chrono::steady_clock::now();
+	    auto oldTime = newTime;
+	    
+	    std::chrono::duration<double> duration;
+	    
 	    double *axis = new double[ this->n_joints ];
+	    double *prev_axis = new double[ this->n_joints ];
 
 	    m_kin.getJoints( axis );
 
@@ -253,6 +242,8 @@ protected:
 	    // main loop
 	    while( !m_end )
 	    {
+
+		m_kin.getJoints( prev_axis  );
 		//////////////////////////////////////////////////////////////
 		// wait for until controller needs new update
 		if( receive() < 1 )
@@ -275,7 +266,8 @@ protected:
 
 		//////////////////////////////////////////////////////////////
 		// refresh with new pose if one is given
-		newTime = get_current_time();
+		newTime = std::chrono::steady_clock::now();
+		
 		
 		if( m_signal )
 		{	        
@@ -289,11 +281,14 @@ protected:
 		//////////////////////////////////////////////////////////////
 		// get intermidiate pose
 		double sendPose[6];// x,y,z,A,B,C
-		
-		update( sendPose, currentPose, newTime - oldTime );
+		duration = std::chrono::duration_cast<std::chrono::seconds>(newTime - oldTime);
+		update( sendPose, currentPose, duration.count() );
 		oldTime = newTime;
+				
 
 #ifdef _DEBUG_RSI_
+		std::cout << "Time since last update: " << duration.count() << std::endl;
+		
 		std::cout << "\nNew pose:\n";
 		for (int i = 0; i < 6; ++i)
 		    std::cout << sendPose[i] << " ";
@@ -321,22 +316,54 @@ protected:
 		    break;
 		}
 
-	    }// while not ended
 
-#ifdef _SOFT_STOP_HH_  
-	    // TODO soft stop, maybe repeat the last pose a couple times
-	    for (int i = 0; i < 250; ++i)
-	    {
-		if( receive()<1 )
-		    break;
-		extractTimestamp( ipoc );
-		packXML( axis, ipoc );// make xml string with joint angles and IPOC
-		send(ipoc);
-	    }
+	    }// while not ended
+#ifdef _DEBUG_RSI_
+	    std::cout << "Ended RSI, slowing down\n";
 #endif
 
+	    //////////////////////////////////////////////////////////////
+	    // slow down the joints to a soft stop
+
+	    if( !m_error )
+	    {
+
+		const double period = duration.count();
+		
+		for(int i = 0; i < this->n_joints; ++i)
+		{
+		    // find out how fast the joint is moving ca
+		    prev_axis[i] = ( axis[i] - prev_axis[i] )/period;// rad/s
+		}
+		const int tf = _SOFT_STOP_HH_/period;
+		double *new_axis = new double[ this->n_joints ];
+		std::cout << period << " " << tf << std::endl;
+		for (int i = 0; i < tf; ++i)
+		{
+		    if( receive()<1 )
+			break;
+		    extractTimestamp( ipoc );
+		    // ramp down speed and acceleration by a cubic polynomial
+		    ramp( axis, prev_axis, i*period, _SOFT_STOP_HH_, new_axis );
+		    std::cout << axis[0] << std::endl;
+		    
+		    packXML( new_axis, ipoc );// make xml string with joint angles and IPOC
+		    send(ipoc);
+		}
+		delete [] new_axis;
+	    }
+
 	    delete [] axis;
+	    delete [] prev_axis;
+
 	    m_end = true;
+	}
+
+    void ramp( const double axis[], const double speed[], double t, double tf, double out[] )
+	{
+	    double r = t/tf;
+	    for(int i = 0; i < this->n_joints; ++i)
+		out[i] = speed[i]*t*( (1/3)*r*r - r + 1 ) + axis[i];
 	}
 
 
