@@ -257,7 +257,6 @@ protected:
 	    // main loop
 	    while( !m_end )
 	    {
-		oldTime = newTime;
 
 		for( int i = 0; i<this->n_joints; ++i )
 		    prev_axis[i] = axis[i];
@@ -268,8 +267,12 @@ protected:
 		    m_error = true;
 		    break;
 		}
-		m_ready = true;
-		
+		if( !m_ready )// first time takes a little more time
+		{
+		    newTime = std::chrono::steady_clock::now();
+		    m_ready = true;
+		}
+		oldTime = newTime;
 		//////////////////////////////////////////////////////////////
 		// extract ACK signal to send back
 		ipoc.clear();
@@ -323,11 +326,16 @@ protected:
 		}
 
 		//////////////////////////////////////////////////////////////
-		// perform interpolation if in start up
+		// perform interpolation if in start up     
 		if( sum_time <= _SOFT_START_HH_ )
 		{
 		    sum_time += duration.count();
 		    rampup( axis, sum_time, _SOFT_START_HH_ );
+		    /*
+		    for (int i = 0; i < 6; ++i)
+			std::cout << axis[i] << " ";
+		    std::cout << std::endl;
+		    */
 		}
 
 
