@@ -329,7 +329,7 @@ protected:
 		    break;
 		}
 
-		std::cout << axis[3] << " ";
+//		std::cout << axis[3] << " ";
 /*
 		//////////////////////////////////////////////////////////////
 		// perform interpolation if in start up     
@@ -348,7 +348,7 @@ protected:
 		  std::cout << axis[i]*(180/3.141592) << " ";
 		std::cout << std::endl;
 #endif
-		std::cout << axis[3] << std::endl;
+//		std::cout << axis[3] << std::endl;
 		
 		for( int i = 0; i<this->n_joints; ++i )
 		  {
