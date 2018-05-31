@@ -54,7 +54,7 @@
 // config
 /////////////////////////////////////////////////////////////
 
-#define _DEBUG_RSI_
+//#define _DEBUG_RSI_
 #define _SOFT_START_HH_ 5// ramps up n seconds from start config to avoid jumps
 #define _SOFT_STOP_HH_ 5// continues n seconds after ending to slow down
 
@@ -234,6 +234,10 @@ protected:
 	    
 	    double *axis = new double[ this->n_joints ];
 	    double *prev_axis = new double[ this->n_joints ];
+	    double *jointSpeeds = new double[ this->n_joints ];
+
+	    for( int i = 0; i<this->n_joints; ++i)
+		jointSpeeds[i] = 0;
 
 	    m_kin.getJoints( axis );
 	    m_kin.getJoints( prev_axis );
@@ -325,6 +329,8 @@ protected:
 		    break;
 		}
 
+		std::cout << axis[3] << " ";
+/*
 		//////////////////////////////////////////////////////////////
 		// perform interpolation if in start up     
 		if( sum_time < _SOFT_START_HH_ )
@@ -332,15 +338,17 @@ protected:
 		    sum_time += duration.count();
 		    rampup( axis, sum_time, _SOFT_START_HH_ );		    
 		}
-		else
-		  std::cout << "________________ RAMPING DONE __________________" << std::endl;
-
+//		else
+//		    std::cout << "..\n";//"________________ RAMPING DONE __________________" << std::endl;
+*/
+		controller( prev_axis, axis, jointSpeeds, duration.count() );
 #ifdef _DEBUG_RSI_
 		std::cout << "Desired axis: ";
 		for( int i = 0; i<this->n_joints; ++i )
 		  std::cout << axis[i]*(180/3.141592) << " ";
 		std::cout << std::endl;
 #endif
+		std::cout << axis[3] << std::endl;
 		
 		for( int i = 0; i<this->n_joints; ++i )
 		  {
@@ -400,6 +408,7 @@ protected:
 
 	    delete [] axis;
 	    delete [] prev_axis;
+	    delete [] jointSpeeds;
 
 	    m_end = true;
 	}
@@ -418,6 +427,30 @@ protected:
 	      axis2[i] = (axis2[i]-m_home[i])*r*r*( 1.5 - r ) + m_home[i];	        
    
 	}
+    void controller( const double prev[], double current[], double speed[], double period )
+	{
+	    const double MAX_JOINT_ACC = 100;//1.7;// rad/s^2
+	    const double OMEGA = 30;//0.3;
+	    const double ZETA = 0.7;
+	    
+	    double qdd = 0;
+	    for(int i = 0; i < this->n_joints; ++i)
+	    {
+		double ad = ( current[i] - ( prev[i] + (2*ZETA/OMEGA)*speed[i] ) )*OMEGA*OMEGA;
+
+		if( fabs(ad) > MAX_JOINT_ACC )
+		    qdd = MAX_JOINT_ACC*sign(ad);
+		else
+		    qdd = ad;
+		
+		current[i] = prev[i] + 0.5*qdd*period*period + speed[i]*period;
+		speed[i] += qdd*period;
+
+//		std::cout << "qdd: " << qdd << " qd: " << speed[i] << " q " << current[i] << std::endl;
+	    }
+	    
+	}
+
 
 
 
