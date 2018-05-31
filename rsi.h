@@ -241,10 +241,10 @@ protected:
 	    double *prev_axis = new double[ this->n_joints ];
 	    double *jointSpeeds = new double[ this->n_joints ];
 
-	    m_kin.getJoints( axis );
 	    for( int i = 0; i<this->n_joints; ++i)
 	    {
-		prev_axis[i] = axis[i];
+		axis[i] = m_home[i];
+		prev_axis[i] = m_home[i];
 		jointSpeeds[i] = 0;
 	    }
 
