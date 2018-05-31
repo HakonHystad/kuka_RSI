@@ -25,7 +25,7 @@ int main( int argc, char** argv )
     std::vector<double> base = {0,0,0,-3.141592/2,0,0};
     std::vector<double> tool = {0,0,0,0,0,0};
 */
-    std::vector<double> start = {1.35, 0, 1.784, 0, 0, 0, 0.09, 0, 0, 0, 0, 0};//{1.350, 0, 1.568, 0, 0, 0, -3.141592, 0, -3.141592, 0, 0, 0};
+    std::vector<double> start = {1.35, 0, 1.784, 0, 0, 0, 0.04, 0.04, 0, 0, 0, 0};//{1.350, 0, 1.568, 0, 0, 0, -3.141592, 0, -3.141592, 0, 0, 0};
     
     auto home_axis = HH::home_axis_kr120;
 

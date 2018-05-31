@@ -66,8 +66,8 @@ namespace HH
 
     const std::vector<double> home_axis_kr120 = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 0};//3.1415926};
 
-    const double MAX_JOINT_ACC = 1;//100;// rad/s^2
-    const double OMEGA = 5;//30;
+    const double MAX_JOINT_ACC = 1.57;//100;// rad/s^2
+    const double OMEGA = 30;//30;
     const double ZETA = 0.7;
 
 
@@ -400,9 +400,10 @@ protected:
 
 		const double period = duration.count();
 		
-
+		
 		for(int i = 0; i < this->n_joints; ++i)
 		{
+		  axis[i] += m_home[i];
 		    // find out how fast the joint is moving ca
 		    prev_axis[i] = ( axis[i] - prev_axis[i] )/period;// rad/s
 		}
@@ -417,7 +418,9 @@ protected:
 		    extractTimestamp( ipoc );
 		    // ramp down speed and acceleration by a cubic polynomial
 		    rampdown( axis, prev_axis, i*period, _SOFT_STOP_HH_, new_axis );
-		    		    
+		    for(int i = 0; i < this->n_joints; ++i)
+		      new_axis[i] -= m_home[i];
+		    
 		    packXML( new_axis, ipoc );// make xml string with joint angles and IPOC
 		    send(ipoc);
 		}
