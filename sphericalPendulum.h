@@ -6,13 +6,6 @@
 #include <valarray>
 
 
-namespace PARAMETER// temp solution
-{
-    const double LENGTH = 1;
-    const double THETA_ALPHA = 0;
-    const double THETA_BETA = 0;
-
-}
 
 
 namespace HH
@@ -27,6 +20,14 @@ public:
 	{}
     ~SphericalPendulum()
 	{}
+
+    // for setting offsets, NBNB: not thread safe yet
+    double& operator[]( const unsigned char idx )
+	{
+	    return m_offset[idx];
+	}
+
+    
 
     
 //////////////////////////////////////////////////////////////
@@ -60,6 +61,26 @@ public:
 
 
 protected:
+
+    void addOffset( double pose[6] )
+	{
+	    KDL::Frame T = KDL::Frame( KDL::Rotation::EulerZYX( pose[3],pose[4],pose[5]), Vector(pose[0],pose[1],pose[2] ) );
+
+	    double tmp[3];
+	    XYZ_to_ZYX( &m_offset[3], tmp );
+
+	    T = T*KDL::Frame( KDL::Rotation::EulerZYX( tmp[0], tmp[1], tmp[2]), Vector(m_offset[0],m_offset[1],m_offset[2] ) );
+
+	    pose[0] = T.p.x();
+	    pose[1] = T.p.y();
+	    pose[2] = T.p.z();
+
+	    T.M.GetEulerZYX( pose[3], pose[4], pose[5] );
+
+	    
+	}
+
+    
     virtual void update( double newPose[6], std::vector<double> &currentPose, double interval )
 	{
 	    const double stepSz = 1e-4;
@@ -109,10 +130,14 @@ protected:
 		newPose[i] = currentPose[i];
 
 	    XYZ_to_ZYX( &currentPose[6], &newPose[3] );
+
+	    addOffset( newPose );
 	}
 
 
 private:
+
+    std::vector<double> m_offset = {0,0,0,0,0,0};
 
 //////////////////////////////////////////////////////////////
 // RK 4 step
@@ -145,11 +170,11 @@ private:
 
 	    f[0] = dynamicsX( LINEAR_PARAMETERS );
 	    f[1] = dynamicsY( LINEAR_PARAMETERS );
-	    f[2] = dynamicsY( LINEAR_PARAMETERS );
+	    f[2] = dynamicsZ( LINEAR_PARAMETERS );
 
 	    f[3] = dynamicsX_d( LINEAR_PARAMETERS );
 	    f[4] = dynamicsY_d( LINEAR_PARAMETERS );
-	    f[5] = dynamicsY_d( LINEAR_PARAMETERS );
+	    f[5] = dynamicsZ_d( LINEAR_PARAMETERS );
 
 	    f[6] = dynamicsAlpha( ANGULAR_PARAMETERS );
 	    f[7] = dynamicsBeta( ANGULAR_PARAMETERS );
@@ -220,7 +245,7 @@ private:
     inline double dynamicsBeta_d( double alpha, double beta, double gamma, double alpha_dot, double beta_dot, double gamma_dot )
 	{
 	    double sinBeta = sin(beta),  cosBeta = cos(beta);
-	    return -( 9.81/PARAMETER::LENGTH + alpha_dot*alpha_dot )*sinBeta*cosBeta;
+	    return -( (9.81/PARAMETER::LENGTH)*cos(alpha) + alpha_dot*alpha_dot*cosBeta )*sinBeta;
 	}
 
     inline double dynamicsGamma_d( double alpha, double beta, double gamma, double alpha_dot, double beta_dot, double gamma_dot )
