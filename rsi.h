@@ -54,7 +54,7 @@
 // config
 /////////////////////////////////////////////////////////////
 
-//#define _DEBUG_RSI_
+#define _DEBUG_RSI_
 #define _SOFT_START_HH_ 5// ramps up n seconds from start config to avoid jumps
 #define _SOFT_STOP_HH_ 5// continues n seconds after ending to slow down
 
@@ -65,6 +65,11 @@ namespace HH
     const int MAXBUFLEN = 1024;
 
     const std::vector<double> home_axis_kr120 = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 0};//3.1415926};
+
+    const double MAX_JOINT_ACC = 1;//1.7;// rad/s^2
+    const double OMEGA = 5;//30;
+    const double ZETA = 0.7;
+
 
 }
 
@@ -341,7 +346,13 @@ protected:
 //		else
 //		    std::cout << "..\n";//"________________ RAMPING DONE __________________" << std::endl;
 */
+		std::cout << "Desired axis before: ";
+		for( int i = 0; i<this->n_joints; ++i )
+		  std::cout << axis[i]*(180/3.141592) << " ";
+		std::cout << std::endl;
+		  
 		controller( prev_axis, axis, jointSpeeds, duration.count() );
+
 #ifdef _DEBUG_RSI_
 		std::cout << "Desired axis: ";
 		for( int i = 0; i<this->n_joints; ++i )
@@ -429,9 +440,6 @@ protected:
 	}
     void controller( const double prev[], double current[], double speed[], double period )
 	{
-	    const double MAX_JOINT_ACC = 100;//1.7;// rad/s^2
-	    const double OMEGA = 30;//0.3;
-	    const double ZETA = 0.7;
 	    
 	    double qdd = 0;
 	    for(int i = 0; i < this->n_joints; ++i)
