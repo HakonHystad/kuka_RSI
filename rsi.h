@@ -54,9 +54,9 @@
 // config
 /////////////////////////////////////////////////////////////
 
-//#define _DEBUG_RSI_
-#define _SOFT_START_HH_ 2// ramps up n seconds from start config to avoid jumps
-#define _SOFT_STOP_HH_ 2// continues n seconds after ending to slow down
+#define _DEBUG_RSI_
+#define _SOFT_START_HH_ 5// ramps up n seconds from start config to avoid jumps
+#define _SOFT_STOP_HH_ 5// continues n seconds after ending to slow down
 
 
 namespace HH
@@ -236,6 +236,7 @@ protected:
 	    double *prev_axis = new double[ this->n_joints ];
 
 	    m_kin.getJoints( axis );
+	    m_kin.getJoints( prev_axis );
 	    /*
 	    double test[6];
 	    m_kin.fk(test);
@@ -258,8 +259,7 @@ protected:
 	    while( !m_end )
 	    {
 
-		for( int i = 0; i<this->n_joints; ++i )
-		    prev_axis[i] = axis[i];
+		
 		//////////////////////////////////////////////////////////////
 		// wait for until controller needs new update
 		if( receive() < 1 )
@@ -327,21 +327,26 @@ protected:
 
 		//////////////////////////////////////////////////////////////
 		// perform interpolation if in start up     
-		if( sum_time <= _SOFT_START_HH_ )
+		if( sum_time < _SOFT_START_HH_ )
 		{
 		    sum_time += duration.count();
-		    rampup( axis, sum_time, _SOFT_START_HH_ );
-		    /*
-		    for (int i = 0; i < 6; ++i)
-			std::cout << axis[i] << " ";
-		    std::cout << std::endl;
-		    */
+		    rampup( axis, sum_time, _SOFT_START_HH_ );		    
 		}
+		else
+		  std::cout << "________________ RAMPING DONE __________________" << std::endl;
 
-
-
+#ifdef _DEBUG_RSI_
+		std::cout << "Desired axis: ";
 		for( int i = 0; i<this->n_joints; ++i )
+		  std::cout << axis[i]*(180/3.141592) << " ";
+		std::cout << std::endl;
+#endif
+		
+		for( int i = 0; i<this->n_joints; ++i )
+		  {
+		    prev_axis[i] = axis[i];
 		    axis[i] -= m_home[i];
+		  }
 		  
 		//////////////////////////////////////////////////////////////
 		// send the new pose to the controller
@@ -409,8 +414,8 @@ protected:
     void rampup( double axis2[], double t, double tf )
 	{
 	    double r = t/tf;
-	    for(int i = 0; i < this->n_joints; ++i)
-		axis2[i] = (axis2[i]-m_home[i])*r*r*( 1.5 - r ) + m_home[i];
+	    for(int i = 0; i < this->n_joints; ++i)	      
+	      axis2[i] = (axis2[i]-m_home[i])*r*r*( 1.5 - r ) + m_home[i];	        
    
 	}
 
