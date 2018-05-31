@@ -66,7 +66,7 @@ namespace HH
 
     const std::vector<double> home_axis_kr120 = {0.0, -1.5707963268, 1.5707963268, 0.0, 1.5707963268, 0};//3.1415926};
 
-    const double MAX_JOINT_ACC = 1;//1.7;// rad/s^2
+    const double MAX_JOINT_ACC = 1;//100;// rad/s^2
     const double OMEGA = 5;//30;
     const double ZETA = 0.7;
 
@@ -241,11 +241,14 @@ protected:
 	    double *prev_axis = new double[ this->n_joints ];
 	    double *jointSpeeds = new double[ this->n_joints ];
 
-	    for( int i = 0; i<this->n_joints; ++i)
-		jointSpeeds[i] = 0;
-
 	    m_kin.getJoints( axis );
-	    m_kin.getJoints( prev_axis );
+	    for( int i = 0; i<this->n_joints; ++i)
+	    {
+		prev_axis[i] = axis[i];
+		jointSpeeds[i] = 0;
+	    }
+
+	   
 	    /*
 	    double test[6];
 	    m_kin.fk(test);
@@ -348,8 +351,12 @@ protected:
 */
 		std::cout << "Desired axis before: ";
 		for( int i = 0; i<this->n_joints; ++i )
-		  std::cout << axis[i]*(180/3.141592) << " ";
+		    std::cout << axis[i]*(180/3.141592) << " ";
 		std::cout << std::endl;
+		for( int i = 0; i<this->n_joints; ++i )
+		    std::cout << prev_axis[i]*(180/3.141592) << " ";
+		std::cout << std::endl;
+
 		  
 		controller( prev_axis, axis, jointSpeeds, duration.count() );
 
